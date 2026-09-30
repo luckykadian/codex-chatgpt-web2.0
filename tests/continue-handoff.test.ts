@@ -127,6 +127,23 @@ describe("parseLunaCheckpointSections", () => {
     expect(sections.objective).toBeUndefined();
   });
 
+  test("keeps blank-line-separated facts as distinct items", () => {
+    const sections = parseLunaCheckpointSections([
+      "Evidence:",
+      "",
+      "codex --version → codex-cli 0.157.1",
+      "",
+      "npm list -g → @openai/codex@0.157.1",
+      "",
+      "curl https://openai.com/codex/ failed with Could not resolve host.",
+    ].join("\n"));
+    expect(sections.evidence).toEqual([
+      "codex --version → codex-cli 0.157.1",
+      "npm list -g → @openai/codex@0.157.1",
+      "curl https://openai.com/codex/ failed with Could not resolve host.",
+    ]);
+  });
+
   test("caps item length so a runaway checkpoint cannot grow without bound", () => {
     const sections = parseLunaCheckpointSections(`Pending:\n- ${"x".repeat(5_000)}`);
     expect(sections.pending[0]!.length).toBeLessThanOrEqual(2_000);
@@ -195,7 +212,7 @@ describe("ContinueHandoffStore", () => {
     const store = new ContinueHandoffStore(tempPath());
     const recorded = store.recordTurn(
       requestFor([userItem("turn-1", "start")]),
-      SAMPLE_CHECKPOINT,
+      { checkpointText: SAMPLE_CHECKPOINT },
     );
     expect(recorded).toBeTrue();
     const latest = store.latest();
@@ -210,13 +227,53 @@ describe("ContinueHandoffStore", () => {
   test("writes the handoff with owner-only permissions", () => {
     const path = tempPath();
     const store = new ContinueHandoffStore(path);
-    store.recordTurn(requestFor([userItem("turn-1", "start")]), SAMPLE_CHECKPOINT);
+    store.recordTurn(requestFor([userItem("turn-1", "start")]), { checkpointText: SAMPLE_CHECKPOINT });
     expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 
-  test("ignores a checkpoint with no usable sections", () => {
+  test("a checkpoint with no usable sections falls back to the turn itself", () => {
     const store = new ContinueHandoffStore(tempPath());
-    expect(store.recordTurn(requestFor([userItem("turn-1", "hi")]), "no headings here")).toBeFalse();
+    expect(store.recordTurn(requestFor([userItem("turn-1", "hi")]), { checkpointText: "no headings here" })).toBeTrue();
+    expect(store.latest()?.source).toBe("answer");
+  });
+
+  test("records a fallback handoff when Luna emitted no private checkpoint", () => {
+    const store = new ContinueHandoffStore(tempPath());
+    const recorded = store.recordTurn(
+      requestFor([userItem("turn-1", "check my disk usage")]),
+      { answer: "Your main Linux disk is 63 GB.\n\n34 GB used and 27 GB free." },
+    );
+    expect(recorded).toBeTrue();
+    const latest = store.latest();
+    expect(latest?.source).toBe("answer");
+    expect(latest?.objective).toBe("check my disk usage");
+    expect(latest?.state.length).toBeGreaterThan(0);
+    // Remaining work is deliberately left empty rather than invented.
+    expect(latest?.pending).toEqual([]);
+  });
+
+  test("prefers the checkpoint over the answer fallback when both are present", () => {
+    const store = new ContinueHandoffStore(tempPath());
+    store.recordTurn(requestFor([userItem("turn-1", "start")]), {
+      checkpointText: SAMPLE_CHECKPOINT,
+      answer: "some visible answer",
+    });
+    expect(store.latest()?.source).toBe("checkpoint");
+    expect(store.latest()?.pending).toEqual([
+      "Update the README migration note",
+      "Remove the legacy JSON fallback",
+    ]);
+  });
+
+  test("records nothing when there is neither a checkpoint nor an answer", () => {
+    const store = new ContinueHandoffStore(tempPath());
+    const parsed = parseRequest({
+      model: MODEL,
+      stream: false,
+      input: [{ type: "message", role: "user", content: "x" }],
+      client_metadata: { "x-codex-turn-metadata": JSON.stringify({ thread_id: "thread-1", turn_id: "turn-1" }) },
+    });
+    expect(store.recordTurn(parsed, {})).toBeFalse();
     expect(store.latest()).toBeUndefined();
   });
 
@@ -238,7 +295,7 @@ describe("ContinueHandoffStore", () => {
 
   test("does nothing for an ordinary first message", () => {
     const store = new ContinueHandoffStore(tempPath());
-    store.recordTurn(requestFor([userItem("turn-1", "start")]), SAMPLE_CHECKPOINT);
+    store.recordTurn(requestFor([userItem("turn-1", "start")]), { checkpointText: SAMPLE_CHECKPOINT });
     const result = store.apply(requestFor([userItem("turn-1", "refactor the loader")]));
     expect(result.applied).toBeFalse();
     expect(result.reason).toBe("not an explicit continue request");
@@ -248,7 +305,7 @@ describe("ContinueHandoffStore", () => {
     const store = new ContinueHandoffStore(tempPath());
     store.recordTurn(
       requestFor([userItem("turn-9", "start the migration")], "turn-9"),
-      SAMPLE_CHECKPOINT,
+      { checkpointText: SAMPLE_CHECKPOINT },
     );
 
     const result = store.apply(requestFor([userItem("turn-1", "continue")]));
@@ -266,7 +323,7 @@ describe("ContinueHandoffStore", () => {
 
   test("resume preserves the active native user revision", () => {
     const store = new ContinueHandoffStore(tempPath());
-    store.recordTurn(requestFor([userItem("turn-9", "start")], "turn-9"), SAMPLE_CHECKPOINT);
+    store.recordTurn(requestFor([userItem("turn-9", "start")], "turn-9"), { checkpointText: SAMPLE_CHECKPOINT });
     const parsed = requestFor([userItem("turn-1", "continue")]);
     const beforeUsers = parsed.context.messages
       .filter(message => message.role === "user")
@@ -282,7 +339,7 @@ describe("ContinueHandoffStore", () => {
 
   test("resume is idempotent in effect: the same handoff replays identically", () => {
     const store = new ContinueHandoffStore(tempPath());
-    store.recordTurn(requestFor([userItem("turn-9", "start")], "turn-9"), SAMPLE_CHECKPOINT);
+    store.recordTurn(requestFor([userItem("turn-9", "start")], "turn-9"), { checkpointText: SAMPLE_CHECKPOINT });
     const stripTimestamps = (messages: Array<{ role: string; content: unknown }>) =>
       JSON.stringify(messages.map(({ role, content }) => ({ role, content })));
     const first = store.apply(requestFor([userItem("turn-1", "continue")]));
@@ -301,8 +358,8 @@ describe("ContinueHandoffStore", () => {
 
   test("a new record supersedes the previous one", () => {
     const store = new ContinueHandoffStore(tempPath());
-    store.recordTurn(requestFor([userItem("t1", "a")], "t1"), "Objective: first\nPending:\n- one");
-    store.recordTurn(requestFor([userItem("t2", "b")], "t2"), "Objective: second\nPending:\n- two");
+    store.recordTurn(requestFor([userItem("t1", "a")], "t1"), { checkpointText: "Objective: first\nPending:\n- one" });
+    store.recordTurn(requestFor([userItem("t2", "b")], "t2"), { checkpointText: "Objective: second\nPending:\n- two" });
     expect(store.latest()?.objective).toBe("second");
     expect(store.latest()?.sourceTurnId).toBe("t2");
   });
@@ -328,10 +385,26 @@ describe("continueHandoffContext", () => {
     expect(text).not.toContain("Evidence:");
   });
 
+  test("discloses when the handoff is derived rather than from a checkpoint", () => {
+    const handoff: ContinueHandoff = {
+      version: 1,
+      source: "answer",
+      threadId: "thread-1",
+      sourceTurnId: "turn-1",
+      updatedAt: Date.now(),
+      objective: "check my disk usage",
+      state: ["34 GB used"],
+      evidence: [],
+      decisions: [],
+      pending: [],
+    };
+    expect(continueHandoffContext(handoff)).toContain("no private checkpoint was emitted");
+  });
+
   test("stored handoff content survives a file round trip", () => {
     const path = tempPath();
     const store = new ContinueHandoffStore(path);
-    store.recordTurn(requestFor([userItem("turn-1", "start")]), SAMPLE_CHECKPOINT);
+    store.recordTurn(requestFor([userItem("turn-1", "start")]), { checkpointText: SAMPLE_CHECKPOINT });
     const file = JSON.parse(readFileSync(path, "utf8"));
     expect(file.version).toBe(1);
     expect(file.handoff.version).toBe(1);

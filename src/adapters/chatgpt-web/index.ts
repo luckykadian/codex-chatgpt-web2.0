@@ -510,10 +510,13 @@ export function createChatGptWebAdapter(
     const finalizeCheckpoint = (browser: Promise<string>): Promise<string> => browser.then(answer => {
       if (!captureLunaCheckpoint) return answer;
       if (checkpointCaptureError) throw checkpointCaptureError;
-      if (capturedCheckpoint) {
-        lunaCheckpointStore.commit(parsed, capturedCheckpoint, answer);
-        continueHandoffStore.recordTurn(parsed, lunaCheckpointText(capturedCheckpoint.checkpoint));
-      }
+      if (capturedCheckpoint) lunaCheckpointStore.commit(parsed, capturedCheckpoint, answer);
+      continueHandoffStore.recordTurn(parsed, {
+        ...(capturedCheckpoint
+          ? { checkpointText: lunaCheckpointText(capturedCheckpoint.checkpoint) }
+          : {}),
+        answer,
+      });
       return answer;
     });
     const browserAbort = new AbortController();
