@@ -198,6 +198,6 @@ bun run app:package
 
 ---
 
-[トラブルシューティング](TROUBLESHOOTING.md) · [セキュリティ](SECURITY.md) · [コントリビューション](CONTRIBUTING.md) · [MIT ライセンス](LICENSE) · [CI](https://github.com/luckykadian/codex-chatgpt-web2.0/actions/workflows/ci.yml)
+[トラブルシューティング](TROUBLESHOOTING.md) · [セキュリティ](SECURITY.md) · [コントリビューション](CONTRIBUTING.md) · [MIT ライセンス](LICENSE) · [フォークについて](FORK.md) · [CI](https://github.com/luckykadian/codex-chatgpt-web2.0/actions/workflows/ci.yml)
 
 もう一つの自作アプリ：<img src="assets/readme/persona-voice.svg" width="20" height="20" alt=""> [ChatGPT Persona Voice](https://github.com/miuuyy/ChatGPT-Persona-Voice) — ChatGPT と Codex に、ローカルでほぼリアルタイムのカスタム音声を。

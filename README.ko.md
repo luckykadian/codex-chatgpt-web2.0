@@ -201,6 +201,6 @@ bun run app:package
 
 ---
 
-[문제 해결](TROUBLESHOOTING.md) · [보안](SECURITY.md) · [기여](CONTRIBUTING.md) · [MIT 라이선스](LICENSE) · [CI](https://github.com/luckykadian/codex-chatgpt-web2.0/actions/workflows/ci.yml)
+[문제 해결](TROUBLESHOOTING.md) · [보안](SECURITY.md) · [기여](CONTRIBUTING.md) · [MIT 라이선스](LICENSE) · [포크 정보](FORK.md) · [CI](https://github.com/luckykadian/codex-chatgpt-web2.0/actions/workflows/ci.yml)
 
 제가 만든 또 다른 앱: <img src="assets/readme/persona-voice.svg" width="20" height="20" alt=""> [ChatGPT Persona Voice](https://github.com/miuuyy/ChatGPT-Persona-Voice) — ChatGPT와 Codex를 위한 로컬, 거의 실시간의 사용자 지정 음성.
