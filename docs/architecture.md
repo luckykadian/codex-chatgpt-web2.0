@@ -190,6 +190,24 @@ every later tool action in the same turn continues to present the current turn c
 ChatGPT status rows become reasoning summaries, while stable prose between rows becomes native
 Codex commentary.
 
+## Continuing a task across threads
+
+Luna owns no compaction path: its rolling checkpoint is exact-parent and per-thread, and separate
+Codex compaction is rejected with HTTP 409. A long Luna task therefore ends at the model context
+window with no in-thread recovery, which is why the only supported answer is to start a new task.
+
+To keep that from costing the accumulated state, the bridge records a cross-thread handoff from the
+structured sections the Luna checkpoint contract already asks the model to emit (`Objective`,
+`State`, `Evidence`, `Decisions`, `Pending`). It is stored at `runtime/continue-handoff.json` under
+the application home with mode `0600`, and replaced on every completed Luna turn.
+
+The handoff is replayed **only** on an explicit request: a brand-new task whose opening message is
+exactly `continue`. The parent-answer guard is what makes this safe — an established thread always
+has a completed assistant answer, so a stray `continue` mid-task can never inject stale state. When
+it does fire, the handoff is replayed as prior assistant-owned session state, never as a new user
+instruction, and the active native user revision is verified unchanged before the turn proceeds. If
+nothing has been recorded yet, the turn emits a visible notice and continues as an ordinary task.
+
 ## Local ChatGPT Limits
 
 The launcher Limits page is an opt-in estimate of its own accepted browser submissions. Setup

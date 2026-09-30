@@ -54,13 +54,13 @@ const MAX_STORED_CHECKPOINTS = 512;
 const CHECKPOINT_TTL_MS = 30 * 24 * 60 * 60_000;
 const VISIBLE_MARKER_RESERVE_CHARS = CHATGPT_LUNA_CHECKPOINT_MARKER.length + 16;
 
-function record(value: unknown): Record<string, unknown> | undefined {
+export function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined;
 }
 
-function itemTurnId(value: unknown): string | undefined {
+export function itemTurnId(value: unknown): string | undefined {
   const turnId = record(record(value)?.internal_chat_message_metadata_passthrough)?.turn_id;
   return typeof turnId === "string" ? turnId : undefined;
 }
@@ -189,7 +189,7 @@ function currentTurnBoundary(parsed: CodexParsedRequest, input: unknown[], turnI
   return firstCurrentItem >= 0 ? firstCurrentItem : undefined;
 }
 
-function assistantItemText(value: unknown): string | undefined {
+export function assistantItemText(value: unknown): string | undefined {
   const item = record(value);
   if (!item || item.role !== "assistant") return undefined;
   if (typeof item.content === "string") return item.content.trim() ? item.content : undefined;
@@ -204,7 +204,7 @@ function assistantItemText(value: unknown): string | undefined {
   return text.trim() ? text : undefined;
 }
 
-function parentAssistantAnswer(
+export function parentAssistantAnswer(
   parsed: CodexParsedRequest,
   turnId: string,
 ): { answer: string; turnId: string } | undefined {
@@ -221,7 +221,7 @@ function parentAssistantAnswer(
   return undefined;
 }
 
-function currentTurnInput(parsed: CodexParsedRequest, turnId: string): unknown[] | undefined {
+export function currentTurnInput(parsed: CodexParsedRequest, turnId: string): unknown[] | undefined {
   const body = record(parsed._rawBody);
   const input = Array.isArray(body?.input) ? body.input : undefined;
   if (!input) return undefined;

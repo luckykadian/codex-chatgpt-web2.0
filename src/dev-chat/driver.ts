@@ -398,6 +398,7 @@ export function createLauncherDevAdapter(
       browserDiagnosticsPath: join(runtimeStateRoot, "diagnostics", "browser-turns"),
       threadEnvironmentStatePath: join(runtimeStateRoot, "thread-environments.json"),
       lunaCheckpointStatePath: join(runtimeStateRoot, "luna-checkpoints.json"),
+      continueHandoffStatePath: join(runtimeStateRoot, "continue-handoff.json"),
       turnTimeoutMs: 60 * 60_000,
       experimentalSkillAttachments: config.experimentalSkillAttachments,
       experimentalFreshConversationPerTurn: config.experimentalFreshConversationPerTurn,

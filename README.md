@@ -28,6 +28,35 @@ Use the ChatGPT Web models available on your account, including Pro, from Codex�
 
 Full harness mode connects ChatGPT to the current task’s files, terminal, tools, and approvals through MCP. Conversations stay tied to your Codex task, so you can keep working as the context grows.
 
+---
+
+> ### Fork: `continue` resumes Luna sessions (Free & Go)
+>
+> On a **Free or Go** subscription every recovery path is switched off by design:
+>
+> | Path | Status on Luna |
+> | --- | --- |
+> | Auto-compaction | Never fires — `auto_compact_token_limit` equals `context_window` (1,050,000) |
+> | `/compact` | Rejected **HTTP 409**, deliberately, asserted by tests |
+> | Bigger Context | Rejected **HTTP 400** |
+> | Sol / Pro rows | Not offered — `!solAvailable` yields Luna routes only |
+>
+> A long task therefore grows until Codex reports *“ran out of room in the model’s context window”*,
+> and the only option is a new thread that **discards everything accumulated**.
+>
+> This fork does **not** enlarge Luna’s context — it makes hitting the limit survivable. Every
+> completed Luna turn records a structured handoff (objective, state, evidence, decisions, pending).
+> Start a new thread and type exactly `continue` to resume the pending work.
+>
+> **On Bigger Context:** it still does *not* work for Free/Go, and this fork does not change that.
+> Luna carries its accumulated transcript inside a single 28,000-token transport budget, so
+> splitting one context across 2 or 6 messages adds no headroom — it is rejected at the transport
+> layer. Bigger Context remains fully functional on Sol and Pro, which Free/Go cannot select.
+>
+> See [FORK.md](FORK.md) for the full reasoning, what changed, how to build it, and limitations.
+
+---
+
 <div id="get-started"><a id="quick-start"></a></div>
 
 ## Get started
