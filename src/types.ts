@@ -286,6 +286,12 @@ export interface CodexProviderConfig {
     threadEnvironmentStatePath?: string;
     /** Persisted exact-parent rolling checkpoints used only by Free/Luna turns. */
     lunaCheckpointStatePath?: string;
+    /**
+     * Persisted cross-thread handoff resumed by an explicit "continue" first message in a new
+     * task. Stored separately from the per-thread checkpoint store, which is exact-parent and
+     * deliberately refuses to cross a thread boundary.
+     */
+    continueHandoffStatePath?: string;
     /** Optional explicit safety ceiling. Browser turns have no absolute deadline by default. */
     turnTimeoutMs?: number;
     /**

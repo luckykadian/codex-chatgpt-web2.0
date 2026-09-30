@@ -35,6 +35,11 @@ import {
   ChatGptLunaCheckpointStore,
   type CapturedChatGptLunaCheckpoint,
 } from "./rolling-checkpoint";
+import {
+  ContinueHandoffStore,
+  continueHandoffMissingWarning,
+  lunaCheckpointText,
+} from "./continue-handoff";
 import { ChatGptExternalTurnProgress } from "./turn-progress";
 import {
   canonicalizeCompactionHandoff,
@@ -290,6 +295,22 @@ function emitReadOnlyContextWarning(
   emit({ type: "assistant_boundary" });
 }
 
+/**
+ * Emit the "nothing to resume" notice at most once per turn. The holder is consumed so repeated
+ * round batches cannot duplicate the warning.
+ */
+function emitContinueHandoffWarning(
+  holder: { pending?: string },
+  emit: (event: AdapterEvent) => void,
+): void {
+  const warning = holder.pending;
+  if (!warning) return;
+  holder.pending = undefined;
+  emit({ type: "assistant_boundary" });
+  emit({ type: "text_delta", text: warning, phase: "commentary" });
+  emit({ type: "assistant_boundary" });
+}
+
 function replayEvents(events: AdapterEvent[], emit: (event: AdapterEvent) => void): void {
   for (const event of events) emit(event);
 }
@@ -397,9 +418,19 @@ export function createChatGptWebAdapter(
       ? resolve(expandUserPath(provider.chatgptWeb.lunaCheckpointStatePath))
       : undefined,
   );
+  const continueHandoffStore = new ContinueHandoffStore(
+    provider.chatgptWeb?.continueHandoffStatePath
+      ? resolve(expandUserPath(provider.chatgptWeb.continueHandoffStatePath))
+      : undefined,
+  );
+  /**
+   * Set while starting a turn and consumed once by the round emitter. `startRuntime` and the
+   * round-emitting runtime method are siblings, so the holder lives in the shared factory scope.
+   */
+  const continueWarning: { pending?: string } = {};
   const currentUsageInput = (parsed: CodexParsedRequest): CodexParsedRequest => (
     parsed.modelId === CHATGPT_WEB_LUNA_MODEL_ID && !parsed._compactionRequest
-      ? lunaCheckpointStore.apply(parsed).parsed
+      ? lunaCheckpointStore.apply(continueHandoffStore.apply(parsed).parsed).parsed
       : parsed
   );
 
@@ -425,9 +456,14 @@ export function createChatGptWebAdapter(
     const captureLunaCheckpoint = parsed.modelId === CHATGPT_WEB_LUNA_MODEL_ID
       && !parsed._compactionRequest
       && Boolean(identity.threadId && identity.turnId);
+    const continueHandoff = continueHandoffStore.apply(parsed);
+    // Recomputed on every start so a stale notice can never leak into a later turn.
+    continueWarning.pending = continueHandoff.reason === "no stored previous session"
+      ? continueHandoffMissingWarning()
+      : undefined;
     const checkpointInput = captureLunaCheckpoint
-      ? lunaCheckpointStore.apply(parsed)
-      : { parsed, applied: false };
+      ? lunaCheckpointStore.apply(continueHandoff.parsed)
+      : { parsed: continueHandoff.parsed, applied: false };
     const conversationKey = !parsed._compactionRequest
       && !freshConversationPerTurn
       && parsed.modelId !== CHATGPT_WEB_LUNA_MODEL_ID
@@ -474,7 +510,10 @@ export function createChatGptWebAdapter(
     const finalizeCheckpoint = (browser: Promise<string>): Promise<string> => browser.then(answer => {
       if (!captureLunaCheckpoint) return answer;
       if (checkpointCaptureError) throw checkpointCaptureError;
-      if (capturedCheckpoint) lunaCheckpointStore.commit(parsed, capturedCheckpoint, answer);
+      if (capturedCheckpoint) {
+        lunaCheckpointStore.commit(parsed, capturedCheckpoint, answer);
+        continueHandoffStore.recordTurn(parsed, lunaCheckpointText(capturedCheckpoint.checkpoint));
+      }
       return answer;
     });
     const browserAbort = new AbortController();
@@ -1210,6 +1249,7 @@ export function createChatGptWebAdapter(
                 session.appendRoundReasoning(roundKey, trace.map(event => event.text));
                 if (replay.length === 0 && !parsed._compactionRequest) {
                   emitRoundBatch(buffer => emitReadOnlyContextWarning(parsed, turnCapabilities, buffer));
+                  emitRoundBatch(buffer => emitContinueHandoffWarning(continueWarning, buffer));
                 }
                 emitRoundBatch(buffer => emitTraceEvents(trace, buffer));
                 if (!bufferStructuredOutput) {
@@ -1282,6 +1322,7 @@ export function createChatGptWebAdapter(
               };
               if (replay.length === 0 && !parsed._compactionRequest) {
                 emitRoundBatch(buffer => emitReadOnlyContextWarning(parsed, turnCapabilities, buffer));
+                emitRoundBatch(buffer => emitContinueHandoffWarning(continueWarning, buffer));
               }
               emitNewTrace(session.runtime.trace.drain());
               emitNewText(session.runtime.text.drain());
