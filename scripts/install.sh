@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-REPOSITORY="${CODEX_CHATGPT_WEB_REPOSITORY:-miuuyy/codex-chatgpt-web}"
+REPOSITORY="${CODEX_CHATGPT_WEB_REPOSITORY:-luckykadian/codex-chatgpt-web2.0}"
 VERSION="${CODEX_CHATGPT_WEB_VERSION:-6.1.3}"
 BIN_DIR="${CODEX_CHATGPT_WEB_BIN_DIR:-$HOME/.local/bin}"
 LIB_DIR="${CODEX_CHATGPT_WEB_LIB_DIR:-$HOME/.local/lib/codex-chatgpt-web}"
