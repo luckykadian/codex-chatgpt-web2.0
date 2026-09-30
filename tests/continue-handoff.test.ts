@@ -224,7 +224,16 @@ describe("ContinueHandoffStore", () => {
     ]);
   });
 
-  test("writes the handoff with owner-only permissions", () => {
+  // Windows has no POSIX mode bits; atomicWriteFile leaves its ACLs to the installer, so only
+  // the mode assertion is platform-specific. Writing itself is covered on every platform.
+  test("writes the handoff file", () => {
+    const path = tempPath();
+    const store = new ContinueHandoffStore(path);
+    store.recordTurn(requestFor([userItem("turn-1", "start")]), { checkpointText: SAMPLE_CHECKPOINT });
+    expect(store.latest()?.objective).toBe("Migrate the config loader to TOML");
+  });
+
+  test.skipIf(process.platform === "win32")("writes the handoff with owner-only permissions", () => {
     const path = tempPath();
     const store = new ContinueHandoffStore(path);
     store.recordTurn(requestFor([userItem("turn-1", "start")]), { checkpointText: SAMPLE_CHECKPOINT });
